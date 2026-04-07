@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.2
+// @version      1.2.3
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -49,17 +49,23 @@ const btn = {
         this.el.classList.add("sc-button-download");
     },
     cb() {
-        // Try playlist header first (Standard for Album/Playlist pages)
+        // Try playlist header first (Standard for Album/Playlist/System pages)
         let header = document.querySelector(".systemPlaylistDetails__controls");
         if (header) {
-            // Check if already attached via wrapper
-            if (this.el.parentElement && this.el.parentElement.classList.contains("systemPlaylistDetails__button")) {
-                if (this.el.parentElement.parentElement === header) return;
-            }
+            // Check if already attached
+            if (header.contains(this.el)) return;
+
             const wrapper = document.createElement("div");
             wrapper.className = "systemPlaylistDetails__button";
             wrapper.appendChild(this.el);
-            header.appendChild(wrapper);
+
+            // Try to find "Add to Next up" to insert after it
+            const nextUp = header.querySelector(".addToNextUp");
+            if (nextUp && nextUp.parentElement && nextUp.parentElement.parentElement === header) {
+                nextUp.parentElement.insertAdjacentElement("afterend", wrapper);
+            } else {
+                header.appendChild(wrapper);
+            }
             return;
         }
 
@@ -249,7 +255,7 @@ async function load(by) {
             btn.el.disabled = false;
         };
         btn.attach();
-    } else if (result.kind === "playlist") {
+    } else if (result.kind === "playlist" || result.kind === "system-playlist" || result.kind === "album") {
         btn.el.textContent = "Download Album";
         btn.el.onclick = async () => {
             const tracks = result.tracks || [];
