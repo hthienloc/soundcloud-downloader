@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.1.0
+// @version      1.2.0
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -111,6 +111,81 @@ async function fetchArrayBuffer(url, signal) {
     return resp.arrayBuffer();
 }
 
+async function downloadTrack(track, clientId) {
+    try {
+        const progressive =
+            track.media &&
+            track.media.transcodings &&
+            track.media.transcodings.find(
+                (t) => t.format && t.format.protocol === "progressive"
+            );
+        if (!progressive) {
+            console.warn("Track unsupported:", track.title);
+            return;
+        }
+        // get the actual progressive audio URL
+        const { url } = await fetch(
+            progressive.url + `?client_id=${clientId}`
+        ).then((r) => r.json());
+        // fetch audio as ArrayBuffer (required to write ID3)
+        const audioBuf = await fetchArrayBuffer(url);
+        // try to fetch artwork
+        let coverBuf = null;
+        const artUrl = artworkBestUrl(track);
+        if (artUrl) {
+            try {
+                coverBuf = await fetchArrayBuffer(artUrl);
+            } catch (e) {
+                console.warn("cover fetch failed", e);
+                coverBuf = null;
+            }
+        }
+
+        // Use browser-id3-writer to set tags
+        let filename = (track.title || "track") + ".mp3";
+        filename = filename.replace(/[\/\\?%*:|"<>]/g, "_");
+
+        let taggedBlob = null;
+        try {
+            const writer = new ID3Writer(audioBuf);
+            if (track.title) writer.setFrame("TIT2", track.title);
+            if (track.user && track.user.username)
+                writer.setFrame("TPE1", [track.user.username]);
+            if (
+                track.publisher_metadata &&
+                track.publisher_metadata.album_title
+            ) {
+                writer.setFrame("TALB", track.publisher_metadata.album_title);
+            }
+            if (coverBuf) {
+                let mime = "image/jpeg";
+                const dv = new Uint8Array(coverBuf);
+                if (dv[0] === 0x89 && dv[1] === 0x50 && dv[2] === 0x4e)
+                    mime = "image/png";
+                writer.setFrame("APIC", {
+                    type: 3,
+                    data: coverBuf,
+                    description: "Cover",
+                    mime: mime
+                });
+            }
+            writer.addTag();
+            taggedBlob = writer.getBlob();
+        } catch (e) {
+            console.warn("ID3 tagging failed, falling back to raw file", e);
+            taggedBlob = new Blob([audioBuf], { type: "audio/mpeg" });
+        }
+
+        // Save (Album downloads should always use fallback to avoid many pickers)
+        const urlObj = URL.createObjectURL(taggedBlob);
+        triggerDownload(urlObj, filename);
+        setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
+
+    } catch (err) {
+        console.error("Download failed", track.title, err);
+    }
+}
+
 async function load(by) {
     btn.detach();
     console.log("load by", by, location.href);
@@ -138,114 +213,31 @@ async function load(by) {
             return {};
         });
     console.log("result", result);
-    if (result.kind !== "track") return;
-    btn.el.onclick = async () => {
-        try {
-            const progressive =
-                result.media &&
-                result.media.transcodings &&
-                result.media.transcodings.find(
-                    (t) => t.format && t.format.protocol === "progressive"
-                );
-            if (!progressive) {
-                alert("Sorry, downloading this music is currently unsupported.");
-                return;
-            }
-            // get the actual progressive audio URL
-            const { url } = await fetch(
-                progressive.url + `?client_id=${clientId}`
-            ).then((r) => r.json());
-            // fetch audio as ArrayBuffer (required to write ID3)
-            const audioBuf = await fetchArrayBuffer(url);
-            // try to fetch artwork
-            let coverBuf = null;
-            const artUrl = artworkBestUrl(result);
-            if (artUrl) {
-                try {
-                    // SoundCloud sometimes returns SVG/other or redirects — let errors be caught
-                    coverBuf = await fetchArrayBuffer(artUrl);
-                } catch (e) {
-                    console.warn("cover fetch failed", e);
-                    coverBuf = null;
-                }
-            }
 
-            // Use browser-id3-writer to set tags
-            // ID3Writer is provided by browser-id3-writer (required at top)
-            let filename = (result.title || "track") + ".mp3";
-            // sanitize filename a bit
-            filename = filename.replace(/[\/\\?%*:|"<>]/g, "_");
-
-            let taggedBlob = null;
-            try {
-                const writer = new ID3Writer(audioBuf);
-                // Basic tags
-                if (result.title) writer.setFrame("TIT2", result.title);
-                if (result.user && result.user.username)
-                    writer.setFrame("TPE1", [result.user.username]);
-                if (
-                    result.publisher_metadata &&
-                    result.publisher_metadata.album_title
-                ) {
-                    writer.setFrame("TALB", result.publisher_metadata.album_title);
-                } else if (result.title) {
-                    // optional: nothing
-                }
-                // add cover if available
-                if (coverBuf) {
-                    // attempt to detect mime from first bytes (jpeg/png)
-                    let mime = "image/jpeg"; // default
-                    const dv = new Uint8Array(coverBuf);
-                    if (dv[0] === 0x89 && dv[1] === 0x50 && dv[2] === 0x4e)
-                        mime = "image/png";
-                    writer.setFrame("APIC", {
-                        type: 3,
-                        data: coverBuf,
-                        description: "Cover",
-                        mime: mime
-                    });
-                }
-                writer.addTag();
-                taggedBlob = writer.getBlob();
-            } catch (e) {
-                console.warn("ID3 tagging failed, falling back to raw file", e);
-                // if tagging failed, fallback to raw audio
-                taggedBlob = new Blob([audioBuf], { type: "audio/mpeg" });
+    if (result.kind === "track") {
+        btn.el.textContent = "Download";
+        btn.el.onclick = async () => {
+            btn.el.textContent = "Downloading...";
+            btn.el.disabled = true;
+            await downloadTrack(result, clientId);
+            btn.el.textContent = "Download";
+            btn.el.disabled = false;
+        };
+        btn.attach();
+    } else if (result.kind === "playlist") {
+        btn.el.textContent = "Download Album";
+        btn.el.onclick = async () => {
+            const tracks = result.tracks || [];
+            btn.el.disabled = true;
+            for (let i = 0; i < tracks.length; i++) {
+                btn.el.textContent = `Downloading ${i + 1}/${tracks.length}...`;
+                await downloadTrack(tracks[i], clientId);
             }
-
-            // Save using Native API or Fallback
-            if (window.showSaveFilePicker) {
-                try {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: filename,
-                        types: [{
-                            description: 'Audio File',
-                            accept: { 'audio/mpeg': ['.mp3'] },
-                        }],
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(taggedBlob);
-                    await writable.close();
-                } catch (e) {
-                    if (e.name !== 'AbortError') {
-                        console.warn("Modern save failed, falling back", e);
-                        const urlObj = URL.createObjectURL(taggedBlob);
-                        triggerDownload(urlObj, filename);
-                        setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
-                    }
-                }
-            } else {
-                // Standard download for non-supported browsers
-                const urlObj = URL.createObjectURL(taggedBlob);
-                triggerDownload(urlObj, filename);
-                setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
-            }
-        } catch (err) {
-            console.error("Download failed", err);
-            alert("Download error: " + (err.message || err));
-        }
-    };
-    btn.attach();
+            btn.el.textContent = "Download Album";
+            btn.el.disabled = false;
+        };
+        btn.attach();
+    }
     console.log("attached");
 }
 

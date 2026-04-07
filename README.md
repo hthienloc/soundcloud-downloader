@@ -1,6 +1,6 @@
 # 🎵 SoundCloud Downloader
 
-**SoundCloud Downloader** is a lightweight, high-performance userscript that allows you to download SoundCloud tracks directly from your browser with high-quality ID3 metadata embedded—no external services required.
+**SoundCloud Downloader** is a lightweight, high-performance userscript that allows you to download SoundCloud tracks and albums directly from your browser with high-quality ID3 metadata embedded—no external services required.
 
 > [!TIP]
 > This tool runs entirely in your browser, ensuring privacy and speed by fetching the progressive stream directly from SoundCloud's infrastructure.
@@ -8,6 +8,7 @@
 ## ✨ Key Features
 
 - **Local Processing:** No third-party servers. All operations happen in your browser.
+- **Album & Playlist Support:** Download entire collections sequentially with a single click.
 - **Rich Metadata:** Automatically embeds:
   - **Title & Artist:** Cleanly extracted from track data.
   - **Album Art:** High-quality covers (up to 1080x1080) injected directly into the ID3 tags.
