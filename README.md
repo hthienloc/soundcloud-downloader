@@ -10,9 +10,8 @@
 - **Local Processing:** No third-party servers. All operations happen in your browser.
 - **Rich Metadata:** Automatically embeds:
   - **Title & Artist:** Cleanly extracted from track data.
-  - **Album Art:** High-quality covers (up to 500x500) injected directly into the ID3 tags.
+  - **Album Art:** High-quality covers (up to 1080x1080) injected directly into the ID3 tags.
   - **Album/Publisher info:** Where available.
-- **Large File Support:** Utilizes [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) for robust memory management.
 - **Native Integration:** Minimalist "Download" button that matches the SoundCloud UI.
 
 ## 📦 Installation

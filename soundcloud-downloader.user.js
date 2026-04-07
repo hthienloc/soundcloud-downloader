@@ -99,7 +99,7 @@ function artworkBestUrl(track) {
     }
     if (!art) return null;
     // replace size placeholders commonly used by SoundCloud
-    return art.replace("-large", "-t500x500").replace("-crop", "-t500x500");
+    return art.replace("-large", "-t1080x1080").replace("-crop", "-t1080x1080");
 }
 
 // fetch arrayBuffer with simple error handling
