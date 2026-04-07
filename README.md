@@ -28,19 +28,18 @@ We recommend one of the following:
 
 Click the link below to install the latest version:
 
-- [**Install SoundCloud Downloader**](soundcloud-downloader.user.js)
+- [**Install SoundCloud Downloader**](https://raw.githubusercontent.com/hthienloc/Local-SoundCloud-Downloader-with-Embedded-Metadata/main/soundcloud-downloader.user.js)
 
 ## ⚠️ Known Limitations
 
 - **Memory Usage:** The file is buffered in memory to inject metadata. Very large tracks may require significant RAM.
 - **CORS Restrictions:** Some cover art may fail to download due to browser security policies. In such cases, the audio will still download without the cover.
-- **Track Pages Only:** Currently optimized for individual track pages.
+- **Native Performance:** Uses modern Native Web APIs (File System Access & Blobs) for fast, lightweight file saving—no middleware required.
 
 ## 🛠 Tech Stack
 
 - [ID3-Writer](https://github.com/egoroof/browser-id3-writer) - Client-side ID3 tagging.
-- [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) - Browser file saving.
-- [Web Streams Polyfill](https://github.com/MattiasBuelens/web-streams-polyfill) - Modern stream support for older environments.
+- [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) - Native browser file management.
 
 ## 📄 License
 

@@ -1,12 +1,10 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.0.0
+// @version      1.1.0
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
-// @require      https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js
-// @require      https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/browser-id3-writer@4.0.0/dist/browser-id3-writer.min.js
 // @grant        none
 // @license      MIT
@@ -14,8 +12,6 @@
 // ==/UserScript==
 
 /* jshint esversion: 8 */
-
-streamSaver.mitm = "https://maple3142.github.io/StreamSaver.js/mitm.html";
 
 function hook(obj, name, callback, type) {
     const fn = obj[name];
@@ -215,34 +211,31 @@ async function load(by) {
                 taggedBlob = new Blob([audioBuf], { type: "audio/mpeg" });
             }
 
-            // Attempt to save using StreamSaver (good for large files)
-            // Note: StreamSaver supports streaming a blob stream to disk: taggedBlob.stream()
-            try {
-                const fileStream = streamSaver.createWriteStream(filename, {
-                    size: taggedBlob.size
-                });
-                // Use readable stream from blob and pipe to streamSaver
-                const readable = taggedBlob.stream();
-                if (readable.pipeTo) {
-                    await readable.pipeTo(fileStream);
-                } else {
-                    // fallback: manual pump
-                    const reader = readable.getReader();
-                    const writer = fileStream.getWriter();
-                    const pump = () =>
-                        reader
-                            .read()
-                            .then(({ done, value }) =>
-                                done ? writer.close() : writer.write(value).then(pump)
-                            );
-                    await pump();
+            // Save using Native API or Fallback
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'Audio File',
+                            accept: { 'audio/mpeg': ['.mp3'] },
+                        }],
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(taggedBlob);
+                    await writable.close();
+                } catch (e) {
+                    if (e.name !== 'AbortError') {
+                        console.warn("Modern save failed, falling back", e);
+                        const urlObj = URL.createObjectURL(taggedBlob);
+                        triggerDownload(urlObj, filename);
+                        setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
+                    }
                 }
-            } catch (e) {
-                // fallback to normal download via object URL
-                console.warn("StreamSaver failed, fallback to anchor download", e);
+            } else {
+                // Standard download for non-supported browsers
                 const urlObj = URL.createObjectURL(taggedBlob);
                 triggerDownload(urlObj, filename);
-                // release object URL after a while
                 setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
             }
         } catch (err) {
