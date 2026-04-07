@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.0
+// @version      1.2.1
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -49,9 +49,25 @@ const btn = {
         this.el.classList.add("sc-button-download");
     },
     cb() {
-        const par = document.querySelector(".sc-button-toolbar .sc-button-group");
-        if (par && this.el.parentElement !== par)
+        // Try playlist header first (Standard for Album/Playlist pages)
+        let header = document.querySelector(".systemPlaylistDetails__controls");
+        if (header) {
+            // Check if already attached via wrapper
+            if (this.el.parentElement && this.el.parentElement.classList.contains("systemPlaylistDetails__button")) {
+                if (this.el.parentElement.parentElement === header) return;
+            }
+            const wrapper = document.createElement("div");
+            wrapper.className = "systemPlaylistDetails__button";
+            wrapper.appendChild(this.el);
+            header.appendChild(wrapper);
+            return;
+        }
+
+        // Try standard track button group (Standard for Track pages)
+        let par = document.querySelector(".sc-button-toolbar .sc-button-group");
+        if (par && this.el.parentElement !== par) {
             par.insertAdjacentElement("beforeend", this.el);
+        }
     },
     attach() {
         this.detach();
@@ -60,7 +76,16 @@ const btn = {
         this.cb();
     },
     detach() {
-        if (this.observer) this.observer.disconnect();
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
+        // If attached via wrapper, remove the wrapper too
+        if (this.el.parentElement && this.el.parentElement.classList.contains("systemPlaylistDetails__button")) {
+            this.el.parentElement.remove();
+        } else if (this.el.parentElement) {
+            this.el.remove();
+        }
     }
 };
 
@@ -190,9 +215,9 @@ async function load(by) {
     btn.detach();
     console.log("load by", by, location.href);
     if (
-        /^(\/(you|stations|discover|stream|upload|search|settings))/.test(
+        /^(\/(you|stations|stream|upload|search|settings))/.test(
             location.pathname
-        )
+        ) && !location.pathname.includes("/sets/")
     )
         return;
     const clientId = await clientIdPromise;
