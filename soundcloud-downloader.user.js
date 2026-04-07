@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.3
+// @version      1.2.5
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -227,25 +227,51 @@ async function load(by) {
     )
         return;
     const clientId = await clientIdPromise;
+    console.log("DEBUG: Using clientId:", clientId);
     if (controller) {
         controller.abort();
         controller = null;
     }
     controller = new AbortController();
-    const result = await fetch(
+    let result = await fetch(
         `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
             location.href
         )}&client_id=${clientId}`,
         { signal: controller.signal }
     )
-        .then((r) => r.json())
+        .then((r) => {
+            console.log("DEBUG: API Resolve status:", r.status);
+            return r.json();
+        })
         .catch((e) => {
-            console.warn("resolve failed", e);
+            console.warn("DEBUG: resolve failed", e);
             return {};
         });
-    console.log("result", result);
+
+    // Fallback for Mixes/System Playlists (resolve often 404s for discovery sets)
+    if ((!result || !result.kind) && location.pathname.includes("/discover/sets/")) {
+        const urn = location.pathname.split("/").filter(Boolean).pop();
+        if (urn) {
+            console.log("DEBUG: Trying system-playlists fallback for URN:", urn);
+            result = await fetch(
+                `https://api-v2.soundcloud.com/system-playlists/${urn}?client_id=${clientId}`,
+                { signal: controller.signal }
+            )
+                .then((r) => {
+                    console.log("DEBUG: Fallback status:", r.status);
+                    return r.json();
+                })
+                .catch((e) => {
+                    console.warn("DEBUG: fallback failed", e);
+                    return {};
+                });
+        }
+    }
+
+    console.log("DEBUG: Resolved result:", result);
 
     if (result.kind === "track") {
+        console.log("DEBUG: Matched kind: track");
         btn.el.textContent = "Download";
         btn.el.onclick = async () => {
             btn.el.textContent = "Downloading...";
@@ -256,6 +282,7 @@ async function load(by) {
         };
         btn.attach();
     } else if (result.kind === "playlist" || result.kind === "system-playlist" || result.kind === "album") {
+        console.log("DEBUG: Matched kind:", result.kind);
         btn.el.textContent = "Download Album";
         btn.el.onclick = async () => {
             const tracks = result.tracks || [];
@@ -268,8 +295,10 @@ async function load(by) {
             btn.el.disabled = false;
         };
         btn.attach();
+    } else {
+        console.log("DEBUG: No download button for kind:", result.kind);
     }
-    console.log("attached");
+    console.log("DEBUG: load finished");
 }
 
 load("init");
