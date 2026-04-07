@@ -9,6 +9,8 @@
 // @grant        none
 // @license      MIT
 // @icon         https://a-v2.sndcdn.com/assets/images/sc-icons/favicon-2cadd14bdb.ico
+// @updateURL    https://raw.githubusercontent.com/hthienloc/Local-SoundCloud-Downloader-with-Embedded-Metadata/main/soundcloud-downloader.user.js
+// @downloadURL  https://raw.githubusercontent.com/hthienloc/Local-SoundCloud-Downloader-with-Embedded-Metadata/main/soundcloud-downloader.user.js
 // ==/UserScript==
 
 /* jshint esversion: 8 */
