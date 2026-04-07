@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Local SoundCloud Downloader (with cover->ID3)
-// @namespace    https://blog.maple3142.net/
-// @version      0.2.1
-// @description  Download SoundCloud without external service + embed cover art into MP3 ID3 metadata.
-// @author       maple3142 + modified by ChatGPT
+// @name         SoundCloud Downloader
+// @namespace    https://github.com/hthienloc
+// @version      1.0.0
+// @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
+// @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
 // @require      https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js
 // @require      https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js
@@ -11,8 +11,6 @@
 // @grant        none
 // @license      MIT
 // @icon         https://a-v2.sndcdn.com/assets/images/sc-icons/favicon-2cadd14bdb.ico
-// @downloadURL  https://update.greasyfork.org/scripts/394837/Local%20SoundCloud%20Downloader.user.js
-// @updateURL    https://update.greasyfork.org/scripts/394837/Local%20SoundCloud%20Downloader.meta.js
 // ==/UserScript==
 
 /* jshint esversion: 8 */

@@ -1,39 +1,48 @@
-# Local SoundCloud Downloader (Userscript)
+# 🎵 SoundCloud Downloader
 
-Download SoundCloud tracks directly in your browser without external services.  
-This userscript fetches the progressive MP3 stream, embeds metadata (title, artist, album), and attaches cover art (if available) into the MP3 file before saving.
+**SoundCloud Downloader** is a lightweight, high-performance userscript that allows you to download SoundCloud tracks directly from your browser with high-quality ID3 metadata embedded—no external services required.
 
-## ✨ Features
+> [!TIP]
+> This tool runs entirely in your browser, ensuring privacy and speed by fetching the progressive stream directly from SoundCloud's infrastructure.
 
-- Adds a **Download** button on SoundCloud track pages.
-- Downloads MP3 files directly (progressive stream).
-- Embeds ID3 metadata:
-  - Title (track title)
-  - Artist (SoundCloud author)
-  - Album (if available)
-  - Cover art (if available)
-- Uses [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) to support large files.
+## ✨ Key Features
 
-## ⚠️ Limitations
-
-- Entire MP3 file is loaded into memory before saving (needed to inject ID3 tags). Large files may consume significant RAM.
-- Cover art fetch may fail due to **CORS restrictions**. In that case, file downloads without cover.
-- Only works on SoundCloud track pages (not playlists, stations, etc.).
+- **Local Processing:** No third-party servers. All operations happen in your browser.
+- **Rich Metadata:** Automatically embeds:
+  - **Title & Artist:** Cleanly extracted from track data.
+  - **Album Art:** High-quality covers (up to 500x500) injected directly into the ID3 tags.
+  - **Album/Publisher info:** Where available.
+- **Large File Support:** Utilizes [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) for robust memory management.
+- **Native Integration:** Minimalist "Download" button that matches the SoundCloud UI.
 
 ## 📦 Installation
 
-1. Install a userscript manager:
-   - [Tampermonkey](https://www.tampermonkey.net/) (recommended)
-   - [Violentmonkey](https://violentmonkey.github.io/)
-2. Install this script:
-   - [Raw GitHub script link](https://raw.githubusercontent.com/hthienloc/Local-SoundCloud-Downloader-with-Embedded-Metadata/main/LocalSoundCloudDownloader.user.js)
+### 1. Install a Userscript Manager
 
-## 🛠 Development
+We recommend one of the following:
 
-- Script entry point: `LocalSoundCloudDownloader.user.js`
-- Update `@version` in header when releasing new versions.
-- Push to GitHub and/or update on Greasy Fork.
+- [Tampermonkey](https://www.tampermonkey.net/) (Best compatibility)
+- [Violentmonkey](https://violentmonkey.github.io/) (Open source)
+
+### 2. Install the Script
+
+Click the link below to install the latest version:
+
+- [**Install SoundCloud Downloader**](soundcloud-downloader.user.js)
+
+## ⚠️ Known Limitations
+
+- **Memory Usage:** The file is buffered in memory to inject metadata. Very large tracks may require significant RAM.
+- **CORS Restrictions:** Some cover art may fail to download due to browser security policies. In such cases, the audio will still download without the cover.
+- **Track Pages Only:** Currently optimized for individual track pages.
+
+## 🛠 Tech Stack
+
+- [ID3-Writer](https://github.com/egoroof/browser-id3-writer) - Client-side ID3 tagging.
+- [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) - Browser file saving.
+- [Web Streams Polyfill](https://github.com/MattiasBuelens/web-streams-polyfill) - Modern stream support for older environments.
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE.md).
+This project is licensed under the [MIT License](LICENSE.md).  
+*Original logic based on work by [maple3142](https://github.com/maple3142).*
