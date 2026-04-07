@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.1
+// @version      1.2.2
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -167,7 +167,7 @@ async function downloadTrack(track, clientId) {
         }
 
         // Use browser-id3-writer to set tags
-        let filename = (track.title || "track") + ".mp3";
+        let filename = (track.title || "track").trim().replace(/\.(mp3|wav|flac|ogg|m4a)$/i, "") + ".mp3";
         filename = filename.replace(/[\/\\?%*:|"<>]/g, "_");
 
         let taggedBlob = null;
