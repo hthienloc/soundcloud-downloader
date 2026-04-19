@@ -281,11 +281,11 @@ async function load(by) {
             btn.el.disabled = false;
         };
         btn.attach();
-    } else if (result.kind === "playlist" || result.kind === "system-playlist" || result.kind === "album") {
+    } else if (result.kind === "playlist" || result.kind === "system-playlist" || result.kind === "album" || result.kind === "personalized-tracks") {
         console.log("DEBUG: Matched kind:", result.kind);
         btn.el.textContent = "Download Album";
         btn.el.onclick = async () => {
-            const tracks = result.tracks || [];
+            const tracks = result.tracks || result.collection || [];
             btn.el.disabled = true;
             for (let i = 0; i < tracks.length; i++) {
                 btn.el.textContent = `Downloading ${i + 1}/${tracks.length}...`;
