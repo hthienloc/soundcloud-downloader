@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.10
+// @version      1.3.1
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -293,20 +293,13 @@ async function load(by) {
         }
     }
 
-    // Second Fallback: DOM Scraping (if API still fails to provide tracks)
-    let scrapedTracks = [];
-    const hasTracks = result && (result.tracks || (result.collection && Array.isArray(result.collection)));
-    if (!hasTracks && result?.kind !== "track") {
-        console.log("DEBUG: API Failed to provide tracks, trying DOM Scraping...");
+    const scrapeFromDOM = () => {
         const trackLinks = document.querySelectorAll(".trackItem__trackTitle");
-        if (trackLinks.length > 0) {
-            scrapedTracks = Array.from(trackLinks).map(a => ({
-                kind: "track_link",
-                url: new URL(a.href, location.origin).pathname
-            }));
-            console.log(`DEBUG: Scraped ${scrapedTracks.length} tracks from DOM`);
-        }
-    }
+        return Array.from(trackLinks).map(a => ({
+            kind: "track_link",
+            url: new URL(a.href, location.origin).pathname
+        }));
+    };
 
     console.log("DEBUG: Resolved result:", result);
 
@@ -321,16 +314,45 @@ async function load(by) {
         };
         btn.attach();
     } else {
-        const tracks = (result && (result.tracks || result.collection)) ? (result.tracks || result.collection) : scrapedTracks;
-        if (tracks && tracks.length > 0) {
-            console.log("DEBUG: Found list of tracks, length:", tracks.length);
+        const hasApiTracks = result && (result.tracks || result.collection);
+        const initialScraped = scrapeFromDOM();
+        
+        if (hasApiTracks || initialScraped.length > 0 || document.querySelector(".trackItem__trackTitle")) {
             btn.el.textContent = "Download Album";
             btn.el.onclick = async () => {
-                console.log(`[Click] Downloading ${tracks.length} tracks...`);
                 btn.el.disabled = true;
-                for (let i = 0; i < tracks.length; i++) {
-                    btn.el.textContent = `Downloading ${i + 1}/${tracks.length}...`;
-                    let trackData = tracks[i];
+                
+                let tracksToDownload = [];
+
+                // Always check for scrolling if it's a discovery set or if API tracks seem incomplete
+                if (location.pathname.includes("/discover/sets/") || !hasApiTracks) {
+                    console.log("DEBUG: Scanning for End-of-Page signal (.paging-eof)...");
+                    let lastCount = 0;
+                    while (!document.querySelector(".paging-eof")) {
+                        const current = scrapeFromDOM();
+                        btn.el.textContent = `Scanning: ${current.length} tracks...`;
+                        
+                        window.scrollTo(0, document.body.scrollHeight);
+                        await new Promise(r => setTimeout(r, 800)); // Wait for chunk to load
+                        
+                        // Break if we're stuck (e.g. no more tracks but no EOF tag either)
+                        if (current.length === lastCount) {
+                            // Secondary check: wait longer once to be sure
+                            await new Promise(r => setTimeout(r, 1500));
+                            if (scrapeFromDOM().length === lastCount) break;
+                        }
+                        lastCount = current.length;
+                    }
+                    tracksToDownload = scrapeFromDOM();
+                    console.log(`DEBUG: Scanning finished. Total: ${tracksToDownload.length}`);
+                } else {
+                    tracksToDownload = result.tracks || result.collection || initialScraped;
+                }
+
+                console.log(`[Click] Downloading ${tracksToDownload.length} tracks...`);
+                for (let i = 0; i < tracksToDownload.length; i++) {
+                    btn.el.textContent = `Downloading ${i + 1}/${tracksToDownload.length}...`;
+                    let trackData = tracksToDownload[i];
                     if (trackData.kind === "track_link") {
                         try {
                             trackData = await fetch(
@@ -339,7 +361,7 @@ async function load(by) {
                                 )}&client_id=${clientId}`
                             ).then(r => r.json());
                         } catch (e) {
-                            console.error("Failed to resolve scraped track", trackData.url, e);
+                            console.error("Failed to resolve track", trackData.url, e);
                             continue;
                         }
                     }
@@ -349,8 +371,6 @@ async function load(by) {
                 btn.el.disabled = false;
             };
             btn.attach();
-        } else {
-            console.log("DEBUG: No tracks found via API or DOM Scraping");
         }
     }
 }
