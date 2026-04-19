@@ -1,0 +1,42 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'soundcloud-downloader.user.js'
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Bump version
+        id: bump
+        run: |
+          FILE="soundcloud-downloader.user.js"
+          CURRENT_VERSION=$(grep -oP '@version\s+\K[\d.]+' "$FILE")
+          echo "Current version: $CURRENT_VERSION"
+          
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((patch + 1))
+          NEW_VERSION="$major.$minor.$NEW_PATCH"
+          echo "New version: $NEW_VERSION"
+          
+          sed -i "s/\(\/\/ @version\s\+\)[0-9.]\+/\1$NEW_VERSION/" "$FILE"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add soundcloud-downloader.user.js
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push
