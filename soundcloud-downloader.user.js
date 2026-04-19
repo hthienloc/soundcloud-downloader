@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SoundCloud Downloader
 // @namespace    https://github.com/hthienloc
-// @version      1.2.5
+// @version      1.2.9
 // @description  Download SoundCloud tracks with embedded ID3 metadata (title, artist, album, cover art) locally.
 // @author       hthienloc (based on maple3142)
 // @match        https://soundcloud.com/*
@@ -17,13 +17,14 @@
 
 function hook(obj, name, callback, type) {
     const fn = obj[name];
+    if (typeof fn !== "function") return () => {};
     obj[name] = function (...args) {
         if (type === "before") callback.apply(this, args);
-        fn.apply(this, args);
+        const result = fn.apply(this, args);
         if (type === "after") callback.apply(this, args);
+        return result;
     };
     return () => {
-        // restore
         obj[name] = fn;
     };
 }
@@ -99,19 +100,50 @@ btn.init();
 
 function getClientId() {
     return new Promise((resolve) => {
-        const restore = hook(
-            XMLHttpRequest.prototype,
-            "open",
-            function (method, url) {
+        let resolved = false;
+        const check = (url) => {
+            if (resolved) return true;
+            try {
                 const u = new URL(url, document.baseURI);
                 const clientId = u.searchParams.get("client_id");
-                if (!clientId) return;
-                console.log("got clientId", clientId);
-                restore();
-                resolve(clientId);
-            },
-            "after"
-        );
+                if (clientId) {
+                    console.log("Found clientId:", clientId);
+                    resolved = true;
+                    cleanup();
+                    resolve(clientId);
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        };
+
+        const unhookXhr = hook(XMLHttpRequest.prototype, "open", function (method, url) {
+            check(url);
+        }, "after");
+
+        const unhookFetch = hook(window, "fetch", function (input) {
+            const url = typeof input === "string" ? input : (input && input.url);
+            if (url) check(url);
+        }, "before");
+
+        const cleanup = () => {
+            unhookXhr();
+            unhookFetch();
+            if (observer) observer.disconnect();
+        };
+
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                    if (node.tagName === "SCRIPT" && node.src) check(node.src);
+                }
+            }
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+
+        for (const s of document.scripts) {
+            if (s.src && check(s.src)) break;
+        }
     });
 }
 
@@ -120,7 +152,6 @@ let controller = null;
 
 // helper: try to build best artwork url
 function artworkBestUrl(track) {
-    // track.artwork_url often contains e.g. -large.jpg ; try t500x500 or original; fallback to user avatar
     let art = track.artwork_url || (track.user && track.user.avatar_url) || null;
     if (
         !art &&
@@ -131,11 +162,9 @@ function artworkBestUrl(track) {
         art = track.publisher_metadata.artwork.url;
     }
     if (!art) return null;
-    // replace size placeholders commonly used by SoundCloud
     return art.replace("-large", "-t1080x1080").replace("-crop", "-t1080x1080");
 }
 
-// fetch arrayBuffer with simple error handling
 async function fetchArrayBuffer(url, signal) {
     const resp = await fetch(url, { signal });
     if (!resp.ok) throw new Error("Fetch failed: " + resp.status);
@@ -154,13 +183,10 @@ async function downloadTrack(track, clientId) {
             console.warn("Track unsupported:", track.title);
             return;
         }
-        // get the actual progressive audio URL
         const { url } = await fetch(
             progressive.url + `?client_id=${clientId}`
         ).then((r) => r.json());
-        // fetch audio as ArrayBuffer (required to write ID3)
         const audioBuf = await fetchArrayBuffer(url);
-        // try to fetch artwork
         let coverBuf = null;
         const artUrl = artworkBestUrl(track);
         if (artUrl) {
@@ -172,7 +198,6 @@ async function downloadTrack(track, clientId) {
             }
         }
 
-        // Use browser-id3-writer to set tags
         let filename = (track.title || "track").trim().replace(/\.(mp3|wav|flac|ogg|m4a)$/i, "") + ".mp3";
         filename = filename.replace(/[\/\\?%*:|"<>]/g, "_");
 
@@ -207,7 +232,6 @@ async function downloadTrack(track, clientId) {
             taggedBlob = new Blob([audioBuf], { type: "audio/mpeg" });
         }
 
-        // Save (Album downloads should always use fallback to avoid many pickers)
         const urlObj = URL.createObjectURL(taggedBlob);
         triggerDownload(urlObj, filename);
         setTimeout(() => URL.revokeObjectURL(urlObj), 60 * 1000);
@@ -233,45 +257,60 @@ async function load(by) {
         controller = null;
     }
     controller = new AbortController();
-    let result = await fetch(
-        `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
-            location.href
-        )}&client_id=${clientId}`,
-        { signal: controller.signal }
-    )
-        .then((r) => {
-            console.log("DEBUG: API Resolve status:", r.status);
-            return r.json();
-        })
-        .catch((e) => {
-            console.warn("DEBUG: resolve failed", e);
-            return {};
-        });
+    
+    let result = null;
+    try {
+        result = await fetch(
+            `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
+                location.href
+            )}&client_id=${clientId}`,
+            { signal: controller.signal }
+        ).then((r) => r.json());
+    } catch (e) {
+        console.warn("DEBUG: resolve failed", e);
+    }
 
-    // Fallback for Mixes/System Playlists (resolve often 404s for discovery sets)
-    if ((!result || !result.kind) && location.pathname.includes("/discover/sets/")) {
+    // Fallback for Mixes/Discovery sets
+    if ((!result || !result.kind || result.errors) && location.pathname.includes("/discover/sets/")) {
         const urn = location.pathname.split("/").filter(Boolean).pop();
         if (urn) {
-            console.log("DEBUG: Trying system-playlists fallback for URN:", urn);
-            result = await fetch(
-                `https://api-v2.soundcloud.com/system-playlists/${urn}?client_id=${clientId}`,
-                { signal: controller.signal }
-            )
-                .then((r) => {
-                    console.log("DEBUG: Fallback status:", r.status);
-                    return r.json();
-                })
-                .catch((e) => {
-                    console.warn("DEBUG: fallback failed", e);
-                    return {};
-                });
+            const encodedUrn = encodeURIComponent(urn);
+            for (const endpoint of ["system-playlists", "discover/sets"]) {
+                try {
+                    const res = await fetch(
+                        `https://api-v2.soundcloud.com/${endpoint}/${encodedUrn}?client_id=${clientId}`,
+                        { signal: controller.signal }
+                    );
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && !json.errors) {
+                            result = json;
+                            break;
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    // Second Fallback: DOM Scraping (if API still fails to provide tracks)
+    let scrapedTracks = [];
+    const hasTracks = result && (result.tracks || (result.collection && Array.isArray(result.collection)));
+    if (!hasTracks && result?.kind !== "track") {
+        console.log("DEBUG: API Failed to provide tracks, trying DOM Scraping...");
+        const trackLinks = document.querySelectorAll(".trackItem__trackTitle");
+        if (trackLinks.length > 0) {
+            scrapedTracks = Array.from(trackLinks).map(a => ({
+                kind: "track_link",
+                url: new URL(a.href, location.origin).pathname
+            }));
+            console.log(`DEBUG: Scraped ${scrapedTracks.length} tracks from DOM`);
         }
     }
 
     console.log("DEBUG: Resolved result:", result);
 
-    if (result.kind === "track") {
-        console.log("DEBUG: Matched kind: track");
+    if (result && result.kind === "track") {
         btn.el.textContent = "Download";
         btn.el.onclick = async () => {
             btn.el.textContent = "Downloading...";
@@ -281,24 +320,39 @@ async function load(by) {
             btn.el.disabled = false;
         };
         btn.attach();
-    } else if (result.kind === "playlist" || result.kind === "system-playlist" || result.kind === "album" || result.kind === "personalized-tracks") {
-        console.log("DEBUG: Matched kind:", result.kind);
-        btn.el.textContent = "Download Album";
-        btn.el.onclick = async () => {
-            const tracks = result.tracks || result.collection || [];
-            btn.el.disabled = true;
-            for (let i = 0; i < tracks.length; i++) {
-                btn.el.textContent = `Downloading ${i + 1}/${tracks.length}...`;
-                await downloadTrack(tracks[i], clientId);
-            }
-            btn.el.textContent = "Download Album";
-            btn.el.disabled = false;
-        };
-        btn.attach();
     } else {
-        console.log("DEBUG: No download button for kind:", result.kind);
+        const tracks = (result && (result.tracks || result.collection)) ? (result.tracks || result.collection) : scrapedTracks;
+        if (tracks && tracks.length > 0) {
+            console.log("DEBUG: Found list of tracks, length:", tracks.length);
+            btn.el.textContent = "Download Album";
+            btn.el.onclick = async () => {
+                console.log(`[Click] Downloading ${tracks.length} tracks...`);
+                btn.el.disabled = true;
+                for (let i = 0; i < tracks.length; i++) {
+                    btn.el.textContent = `Downloading ${i + 1}/${tracks.length}...`;
+                    let trackData = tracks[i];
+                    if (trackData.kind === "track_link") {
+                        try {
+                            trackData = await fetch(
+                                `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
+                                    "https://soundcloud.com" + trackData.url
+                                )}&client_id=${clientId}`
+                            ).then(r => r.json());
+                        } catch (e) {
+                            console.error("Failed to resolve scraped track", trackData.url, e);
+                            continue;
+                        }
+                    }
+                    await downloadTrack(trackData, clientId);
+                }
+                btn.el.textContent = "Download Album";
+                btn.el.disabled = false;
+            };
+            btn.attach();
+        } else {
+            console.log("DEBUG: No tracks found via API or DOM Scraping");
+        }
     }
-    console.log("DEBUG: load finished");
 }
 
 load("init");
