@@ -6,10 +6,6 @@ on:
       - main
     paths:
       - 'soundcloud-downloader.user.js'
-    paths-ignore:
-      - 'README.md'
-      - '.github/**'
-      - 'LICENSE.md'
 
 permissions:
   contents: write
