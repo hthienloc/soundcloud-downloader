@@ -314,58 +314,52 @@ async function load(by) {
         };
         btn.attach();
     } else {
-        const hasApiTracks = result && (result.tracks || result.collection);
-        const initialScraped = scrapeFromDOM();
-        
-        if (hasApiTracks || initialScraped.length > 0 || document.querySelector(".trackItem__trackTitle")) {
+        // For playlists, albums, or discovery sets, we use DOM scraping to get all tracks.
+        // This overcomes the API limit which often only returns the first 20 tracks.
+        if (document.querySelector(".trackItem__trackTitle") || (result && (result.tracks || result.collection))) {
             btn.el.textContent = "Download Album";
             btn.el.onclick = async () => {
                 btn.el.disabled = true;
                 
-                let tracksToDownload = [];
-
-                // Always check for scrolling if it's a discovery set or if API tracks seem incomplete
-                if (location.pathname.includes("/discover/sets/") || !hasApiTracks) {
-                    console.log("DEBUG: Scanning for End-of-Page signal (.paging-eof)...");
-                    let lastCount = 0;
-                    while (!document.querySelector(".paging-eof")) {
-                        const current = scrapeFromDOM();
-                        btn.el.textContent = `Scanning: ${current.length} tracks...`;
-                        
-                        window.scrollTo(0, document.body.scrollHeight);
-                        await new Promise(r => setTimeout(r, 800)); // Wait for chunk to load
-                        
-                        // Break if we're stuck (e.g. no more tracks but no EOF tag either)
-                        if (current.length === lastCount) {
-                            // Secondary check: wait longer once to be sure
-                            await new Promise(r => setTimeout(r, 1500));
-                            if (scrapeFromDOM().length === lastCount) break;
-                        }
-                        lastCount = current.length;
+                console.log("DEBUG: Scanning for all tracks in playlist via DOM...");
+                let lastCount = 0;
+                // Scroll to load all tracks into the DOM
+                while (!document.querySelector(".paging-eof")) {
+                    const current = scrapeFromDOM();
+                    btn.el.textContent = `Scanning: ${current.length} tracks...`;
+                    
+                    window.scrollTo(0, document.body.scrollHeight);
+                    await new Promise(r => setTimeout(r, 800)); // Wait for chunk to load
+                    
+                    // Break if we're stuck (no more tracks loading)
+                    if (current.length === lastCount) {
+                        await new Promise(r => setTimeout(r, 1500));
+                        if (scrapeFromDOM().length === lastCount) break;
                     }
-                    tracksToDownload = scrapeFromDOM();
-                    console.log(`DEBUG: Scanning finished. Total: ${tracksToDownload.length}`);
-                } else {
-                    tracksToDownload = result.tracks || result.collection || initialScraped;
+                    lastCount = current.length;
                 }
 
+                const tracksToDownload = scrapeFromDOM();
                 console.log(`[Click] Downloading ${tracksToDownload.length} tracks...`);
+                
                 for (let i = 0; i < tracksToDownload.length; i++) {
                     btn.el.textContent = `Downloading ${i + 1}/${tracksToDownload.length}...`;
-                    let trackData = tracksToDownload[i];
-                    if (trackData.kind === "track_link") {
-                        try {
-                            trackData = await fetch(
-                                `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
-                                    "https://soundcloud.com" + trackData.url
-                                )}&client_id=${clientId}`
-                            ).then(r => r.json());
-                        } catch (e) {
-                            console.error("Failed to resolve track", trackData.url, e);
-                            continue;
+                    const trackLink = tracksToDownload[i];
+                    try {
+                        const trackData = await fetch(
+                            `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
+                                "https://soundcloud.com" + trackLink.url
+                            )}&client_id=${clientId}`
+                        ).then(r => r.json());
+                        
+                        if (trackData && !trackData.errors) {
+                            await downloadTrack(trackData, clientId);
+                        } else {
+                            console.error("Failed to resolve track data", trackLink.url, trackData);
                         }
+                    } catch (e) {
+                        console.error("Failed to resolve track", trackLink.url, e);
                     }
-                    await downloadTrack(trackData, clientId);
                 }
                 btn.el.textContent = "Download Album";
                 btn.el.disabled = false;
