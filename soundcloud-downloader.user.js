@@ -165,13 +165,38 @@ function artworkBestUrl(track) {
     return art.replace("-large", "-t1080x1080").replace("-crop", "-t1080x1080");
 }
 
-async function fetchArrayBuffer(url, signal) {
+async function fetchArrayBuffer(url, signal, onProgress) {
     const resp = await fetch(url, { signal });
     if (!resp.ok) throw new Error("Fetch failed: " + resp.status);
-    return resp.arrayBuffer();
+
+    if (!onProgress) return resp.arrayBuffer();
+
+    const contentLength = +resp.headers.get("Content-Length");
+    if (!contentLength) return resp.arrayBuffer();
+
+    let loaded = 0;
+    const reader = resp.body.getReader();
+    const chunks = [];
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.length;
+        onProgress(Math.round((loaded / contentLength) * 100));
+    }
+
+    const allChunks = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+        allChunks.set(chunk, offset);
+        offset += chunk.length;
+    }
+
+    return allChunks.buffer;
 }
 
-async function downloadTrack(track, clientId) {
+async function downloadTrack(track, clientId, onProgress) {
     try {
         const progressive =
             track.media &&
@@ -186,7 +211,7 @@ async function downloadTrack(track, clientId) {
         const { url } = await fetch(
             progressive.url + `?client_id=${clientId}`
         ).then((r) => r.json());
-        const audioBuf = await fetchArrayBuffer(url);
+        const audioBuf = await fetchArrayBuffer(url, null, onProgress);
         let coverBuf = null;
         const artUrl = artworkBestUrl(track);
         if (artUrl) {
@@ -306,9 +331,11 @@ async function load(by) {
     if (result && result.kind === "track") {
         btn.el.textContent = "Download";
         btn.el.onclick = async () => {
-            btn.el.textContent = "Downloading...";
+            btn.el.textContent = "Downloading... (0%)";
             btn.el.disabled = true;
-            await downloadTrack(result, clientId);
+            await downloadTrack(result, clientId, (percent) => {
+                btn.el.textContent = `Downloading... (${percent}%)`;
+            });
             btn.el.textContent = "Download";
             btn.el.disabled = false;
         };
@@ -343,7 +370,9 @@ async function load(by) {
                 console.log(`[Click] Downloading ${tracksToDownload.length} tracks...`);
                 
                 for (let i = 0; i < tracksToDownload.length; i++) {
-                    btn.el.textContent = `Downloading ${i + 1}/${tracksToDownload.length}...`;
+                    const trackIdx = i + 1;
+                    const totalTracks = tracksToDownload.length;
+                    btn.el.textContent = `Downloading ${trackIdx}/${totalTracks}... (0%)`;
                     const trackLink = tracksToDownload[i];
                     try {
                         const trackData = await fetch(
@@ -353,7 +382,9 @@ async function load(by) {
                         ).then(r => r.json());
                         
                         if (trackData && !trackData.errors) {
-                            await downloadTrack(trackData, clientId);
+                            await downloadTrack(trackData, clientId, (percent) => {
+                                btn.el.textContent = `Downloading ${trackIdx}/${totalTracks}... (${percent}%)`;
+                            });
                         } else {
                             console.error("Failed to resolve track data", trackLink.url, trackData);
                         }
