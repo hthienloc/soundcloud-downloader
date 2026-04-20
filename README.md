@@ -8,12 +8,12 @@
 ## ✨ Key Features
 
 - **Local Processing:** No third-party servers. All operations happen in your browser.
-- **Album & Playlist Support:** Download entire collections sequentially with a single click.
-- **Rich Metadata:** Automatically embeds:
-  - **Title & Artist:** Cleanly extracted from track data.
-  - **Album Art:** High-quality covers (up to 1080x1080) injected directly into the ID3 tags.
-  - **Album/Publisher info:** Where available.
-- **Native Integration:** Minimalist "Download" button that matches the SoundCloud UI.
+- **Enhanced Playlist Support:** Uses advanced DOM scraping and automatic scrolling to bypass API limitations, allowing you to download entire playlists and albums regardless of their size.
+- **Rich Metadata Embedding:**
+  - **Title & Artist:** Cleanly extracted and tagged.
+  - **High-Quality Cover Art:** Automatically resolves and injects artwork up to 1080x1080.
+  - **Album Info:** Metadata injected into ID3 tags where available.
+- **Seamless Integration:** Adds a native-looking "Download" button directly to the SoundCloud interface.
 
 ## 📦 Installation
 
@@ -32,14 +32,15 @@ Click the link below to install the latest version:
 
 ## ⚠️ Known Limitations
 
-- **Memory Usage:** The file is buffered in memory to inject metadata. Very large tracks may require significant RAM.
-- **CORS Restrictions:** Some cover art may fail to download due to browser security policies. In such cases, the audio will still download without the cover.
-- **Native Performance:** Uses modern Native Web APIs (File System Access & Blobs) for fast, lightweight file saving—no middleware required.
+- **Browser Memory:** Large tracks are buffered in RAM to process ID3 tagging before downloading.
+- **CORS Policies:** Some cover art might be blocked by browser security policies; the script will gracefully fall back to downloading the audio without art in these rare cases.
+- **Sequential Download:** For playlists, tracks are downloaded one by one to prevent browser throttling and ensure stable processing.
 
 ## 🛠 Tech Stack
 
-- [ID3-Writer](https://github.com/egoroof/browser-id3-writer) - Client-side ID3 tagging.
-- [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) - Native browser file management.
+- [browser-id3-writer](https://github.com/egoroof/browser-id3-writer) - Client-side ID3 tagging.
+- **MutationObserver & DOM Scraping:** For dynamic UI integration and robust playlist track detection.
+- **Fetch API & Blobs:** For high-performance, middleware-free audio data handling.
 
 ## 📄 License
 
